@@ -22,9 +22,9 @@ import json
 import logging
 import smtplib
 import ssl
-import random
+import random\nimport asyncio
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from email.mime.multipart import MIMEMultipart\nfrom email.mime.audio import MIMEAudio
 from email.header import Header
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Tuple
@@ -406,7 +406,7 @@ def generate_html_email(sections_data: Dict[str, List[Dict]], period: str) -> st
     return html
 
 
-def send_email(html_content: str, period: str):
+\n\ndef gen_audio(text, out_path):\n    try:\n        import edge_tts\n        asyncio.run(edge_tts.Communicate(text, 'zh-CN-XiaoxiaoNeural').save(out_path))\n        sz = os.path.getsize(out_path)\n        logger.info('  audio: '+str(sz)+' bytes')\n        return sz > 1000\n    except Exception as e:\n        logger.warning('  audio fail: '+str(e))\n        return False\n\ndef send_email(html_content: str, period: str, audio_path: str = ''):
     """通过 SMTP 发送邮件"""
     now = datetime.now(CST)
     date_str = now.strftime("%Y年%m月%d日")
@@ -474,7 +474,7 @@ def main():
     html_content = generate_html_email(sections_data, period)
 
     logger.info("📧 发送邮件...")
-    success = send_email(html_content, period)
+\n    logger.info('\U0001f3b5 \u751f\u6210\u97f3\u9891...')\n    audio_path = '/tmp/news_audio.mp3'\n    has_audio = gen_audio(html_content, audio_path)\n    logger.info(f'  \u97f3\u9891{"\u5df2\u751f\u6210" if has_audio else "\u8df3\u8fc7"}')\n    success = send_email(html_content, period, audio_path if has_audio else '')\n
 
     if success:
         logger.info("✅ 本轮简报任务完成！")
