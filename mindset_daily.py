@@ -8,6 +8,8 @@ from email.header import Header
 from datetime import datetime, timezone, timedelta
 from html import escape
 
+NL = chr(10)
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
 CST = timezone(timedelta(hours=8), 'CST')
@@ -16,7 +18,6 @@ SMTP_U = os.environ.get('SMTP_USER', '')
 SMTP_P = os.environ.get('SMTP_PASS', '')
 TO = os.environ.get('RECEIVER', SMTP_U)
 KEY = os.environ.get('DEEPSEEK_API_KEY', '')
-
 PROMPT = '你是阅历沉淀型认知内容撰稿人。邮件结构：1.开篇问候 2.核心精讲 3.践行任务 4.升华。字数1900-2100。仅输出邮件正文。'
 
 def call_api():
@@ -33,7 +34,7 @@ def gen_audio(text, path):
         import edge_tts
         asyncio.run(edge_tts.Communicate(text[:1200], 'zh-CN-XiaoxiaoNeural').save(path))
         sz = os.path.getsize(path)
-        logger.info('  audio: '+str(sz)+' bytes')
+        logger.info('  audio: '+str(sz))
         return sz > 1000
     except Exception as e:
         logger.warning('  audio fail: '+str(e))
@@ -43,38 +44,14 @@ def make_html(bt):
     now = datetime.now(CST)
     ds = now.strftime('%Y年%m月%d日')
     subj = '【每日认知成长】发自我的codexGPT|'+ds
-    
-    css = """body{margin:0;padding:0;background:#EFEBE9;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
-.wrap{max-width:640px;margin:0 auto;background:#FFF8F5}
-.hd{background:linear-gradient(135deg,#4E342E,#3E2723);padding:36px 24px 20px;text-align:center}
-.hd .t{font-size:21px;font-weight:bold;color:#fff;letter-spacing:2px;margin:0}
-.hd .d{font-size:12px;color:#BCAAA4;margin-top:6px}
-.ct{padding:24px 20px}
-.h{font-size:17px;font-weight:bold;color:#5D4037;margin:30px 0 12px 0;padding:0 0 8px 0;border-bottom:2px solid #D7CCC8}
-p{font-size:15px;line-height:1.9;color:#3E2723;margin:0 0 14px 0;text-indent:2em}
-@media(max-width:480px){.ct{padding:14px}.hd{padding:28px 14px 16px}.hd .t{font-size:18px}}"""
-    
     parts = []
-    for para in bt.split('
-
-'):
+    for para in bt.split(NL + NL):
         p = para.strip()
         if not p: continue
         s = escape(p)
-        if len(s) < 35 and (s.endswith('：') or s.startswith('【')):
-            parts.append('<div class="h">'+s+'</div>')
-        else:
-            parts.append('<p>'+s+'</p>')
-    
-    html = ('<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">'
-        + '<meta name="viewport" content="width=device-width,initial-scale=1.0">'
-        + '<style>'+css+'</style></head><body>'
-        + '<div class="wrap">'
-        + '<div class="hd"><p class="t">每日认知成长</p><p class="d">'+ds+'</p></div>'
-        + '<div class="ct">'+''.join(parts)+'</div>'
-        + '<div style="border-top:1px solid #D7CCC8;padding:20px;text-align:center;font-size:12px;color:#A1887F">'
-        + '本内容由AI生成，仅用于个人认知提升。</div>'
-        + '</div></body></html>')
+        parts.append('<p>'+s+'</p>')
+    css = 'body{margin:0;padding:0;background:#EFEBE9;font-family:sans-serif}.wrap{max-width:640px;margin:0 auto;background:#FFF8F5}.hd{background:linear-gradient(135deg,#4E342E,#3E2723);padding:30px 20px;text-align:center}.hd .t{font-size:20px;font-weight:bold;color:#fff;letter-spacing:1px}.hd .d{font-size:12px;color:#BCAAA4;margin-top:4px}.ct{padding:20px}p{font-size:15px;line-height:1.8;color:#3E2723;margin:0 0 12px 0}'
+    html = ('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>'+css+'</style></head><body><div class="wrap"><div class="hd"><p class="t">每日认知成长</p><p class="d">'+ds+'</p></div><div class="ct">'+''.join(parts)+'</div><div style="border-top:1px solid #D7CCC8;padding:16px;text-align:center;font-size:12px;color:#A1887F">本内容由AI生成，仅用于个人认知提升。</div></div></body></html>')
     return subj, html
 
 def send_mail(bt, ap=''):
@@ -85,27 +62,19 @@ def send_mail(bt, ap=''):
     msg['To'] = TO
     msg.attach(MIMEText(html, 'html', 'utf-8'))
     if ap and os.path.exists(ap):
-        try:
-            with open(ap, 'rb') as f:
-                a = MIMEAudio(f.read(), 'mp3')
-            a.add_header('Content-Disposition', 'attachment', filename='今日认知成长.mp3')
-            msg.attach(a)
-        except: pass
+        with open(ap, 'rb') as f: msg.attach(MIMEAudio(f.read(), 'mp3'))
     ctx = ssl.create_default_context()
     with smtplib.SMTP_SSL('smtp.163.com', 465, context=ctx, timeout=30) as s:
-        s.login(SMTP_U, SMTP_P)
-        s.sendmail(SMTP_U, [TO], msg.as_string())
+        s.login(SMTP_U, SMTP_P); s.sendmail(SMTP_U, [TO], msg.as_string())
     logger.info('sent')
 
 def main():
     logger.info('start')
     if not SMTP_U or not SMTP_P: logger.error('mail'); sys.exit(1)
     body = call_api()
-    wc = len(body.replace('\n','').replace(' ',''))
-    logger.info('body: '+str(wc)+' chars')
-    ap = '/tmp/mindset_audio.mp3'
-    ha = gen_audio(body, ap)
-    send_mail(body, ap if ha else '')
+    logger.info('body: '+str(len(body))+' chars')
+    ha = gen_audio(body, '/tmp/a.mp3')
+    send_mail(body, '/tmp/a.mp3' if ha else '')
     logger.info('done')
 
 if __name__=='__main__': main()
