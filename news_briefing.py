@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 每日资讯简报自动生成与推送系统 v1.0
@@ -67,7 +67,7 @@ SMTP_PORT = 465
 SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASS = os.environ.get("SMTP_PASS", "")
 RECEIVER = os.environ.get("RECEIVER", SMTP_USER)
-SENDER_NAME = "openclaw"
+SENDER_NAME = "发自我的codexGPT"
 
 # ─────────────────────────────────────────────
 # 新闻源配置（板块 → 多个RSS/API源）
@@ -315,7 +315,6 @@ def select_top(items: List[Dict], max_count: int = 5, min_count: int = 3) -> Lis
 
 
 def generate_learning_tasks() -> List[str]:
-    """生成今日学习任务"""
     now = datetime.now(CST)
     weekday_map = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
     key = weekday_map[now.weekday()]
@@ -323,16 +322,13 @@ def generate_learning_tasks() -> List[str]:
     return tasks
 
 
-def generate_html_email(sections_data: Dict[str, List[Dict]], period: str, learning_tasks: List[str]) -> str:
+def generate_html_email(sections_data: Dict[str, List[Dict]], period: str) -> str:
     """生成手机端完美适配的HTML邮件内容"""
     now = datetime.now(CST)
     date_str = now.strftime("%Y年%m月%d日")
     period_label = "早间" if period == "morning" else "晚间"
     time_label = "7点" if period == "morning" else "19点"
 
-    tasks_html = ""
-    for task in learning_tasks:
-        tasks_html += f'<tr><td style="padding:6px 0;font-size:15px;color:#444;border-bottom:1px dashed #eee;">☐ {escape(task)}</td></tr>\n'
 
     sections_html = ""
     for section, items in sections_data.items():
@@ -397,12 +393,6 @@ def generate_html_email(sections_data: Dict[str, List[Dict]], period: str, learn
         </div>
     </div>
     <div style="padding:16px;">
-        <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:10px;padding:16px;margin-bottom:20px;">
-            <div style="font-size:17px;font-weight:bold;color:#fff;margin-bottom:10px;">📚 今日学习任务</div>
-            <table style="width:100%;border-collapse:collapse;">
-                {tasks_html}
-            </table>
-        </div>
         {sections_html}
         {risk_note}
         <div style="border-top:1px solid #e0e0e0;padding:16px 0;margin-top:8px;text-align:center;font-size:12px;color:#999;">
@@ -479,13 +469,9 @@ def main():
         sections_data[section] = selected
         logger.info(f"  ✓ 「{section}」精选 {len(selected)} 条 (原始{len(items)}条)")
 
-    logger.info("📚 生成今日学习任务...")
-    learning_tasks = generate_learning_tasks()
-    for t in learning_tasks:
-        logger.info(f"    ☐ {t}")
 
     logger.info("✏️ 生成HTML邮件...")
-    html_content = generate_html_email(sections_data, period, learning_tasks)
+    html_content = generate_html_email(sections_data, period)
 
     logger.info("📧 发送邮件...")
     success = send_email(html_content, period)
@@ -498,3 +484,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
