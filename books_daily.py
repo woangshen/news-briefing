@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, logging, smtplib, ssl, requests, asyncio
+import os, sys, logging, smtplib, ssl, requests, asyncio, json, re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.audio import MIMEAudio
@@ -15,7 +15,8 @@ SMTP_U = os.environ.get("SMTP_USER", "")
 SMTP_P = os.environ.get("SMTP_PASS", "")
 TO = os.environ.get("RECEIVER", SMTP_U)
 KEY = os.environ.get("DEEPSEEK_API_KEY", "")
-PROMPT = "推荐5本不同类型的书。每本书用|||分隔：书名|||作者|||国籍|||类型|||简介(100字)|||优点(50字)|||缺点(50字)|||推荐理由(80字)"
+
+PROMPT = "推荐5本不同类型的书，输出一个JSON数组，不要输出其他内容。每本书的字段：title(书名)、author(作者)、nationality(作者国籍)、genre(类型)、intro(简介100字左右)、pros(优点50字)、cons(缺点50字)、reason(推荐理由80字)"
 
 def get_books():
     if not KEY: logger.error("no key"); sys.exit(1)
@@ -23,13 +24,26 @@ def get_books():
         json={"model":"deepseek-chat","messages":[{"role":"system","content":PROMPT},{"role":"user","content":"推荐5本书"}],"temperature":0.8,"max_tokens":4000},
         headers={"Authorization":"Bearer "+KEY,"Content-Type":"application/json"},timeout=120)
     r.raise_for_status()
-    books = []
-    for line in r.json()["choices"][0]["message"]["content"].strip().split(NL):
-        if "|||" in line:
-            p = line.split("|||")
-            if len(p) >= 8:
-                books.append({"t":p[0].strip(),"a":p[1].strip(),"n":p[2].strip(),"g":p[3].strip(),"d":p[4].strip(),"pro":p[5].strip(),"con":p[6].strip(),"r":p[7].strip()})
-    return books[:5]
+    content = r.json()["choices"][0]["message"]["content"].strip()
+    # 提取JSON数组
+    m = re.search(r'\[.*\]', content, re.DOTALL)
+    if not m: return []
+    try:
+        data = json.loads(m.group(0))
+        books = []
+        for b in data[:5]:
+            books.append({
+                "t": str(b.get("title","")).strip(),
+                "a": str(b.get("author","")).strip(),
+                "n": str(b.get("nationality","")).strip(),
+                "g": str(b.get("genre","")).strip(),
+                "d": str(b.get("intro","")).strip(),
+                "pro": str(b.get("pros","")).strip(),
+                "con": str(b.get("cons","")).strip(),
+                "r": str(b.get("reason","")).strip(),
+            })
+        return books
+    except: return []
 
 def make_html(books):
     now = datetime.now(CST)
@@ -40,9 +54,9 @@ def make_html(books):
     for i,b in enumerate(books):
         c = colors[i]
         cards += '<div style="margin:14px 0;border:1px solid #E0E0E0;border-radius:10px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.06);">'
-        cards += '<div style="background:'+c+';padding:10px 14px;color:#fff;font-size:15px;font-weight:bold;">📚 '+escape(b["t"])+'</div>'
+        cards += '<div style="background:'+c+';padding:12px 14px;color:#fff;font-size:16px;font-weight:bold;">📚 '+escape(b["t"])+'</div>'
         cards += '<div style="padding:12px;">'
-        cards += '<div style="font-size:12px;color:#999;margin-bottom:6px;">✍️ '+escape(b["a"])+' · '+escape(b["n"])+' · '+escape(b["g"])+'</div>'
+        cards += '<div style="font-size:12px;color:#888;margin-bottom:8px;">✍️ <b>'+escape(b["a"])+'</b> · '+escape(b["n"])+' · '+escape(b["g"])+'</div>'
         cards += '<div style="font-size:13px;color:#444;line-height:1.7;margin-bottom:8px;">'+escape(b["d"])+'</div>'
         cards += '<div style="display:flex;gap:6px;margin-bottom:8px;">'
         cards += '<div style="flex:1;background:#E8F5E9;padding:6px 8px;border-radius:4px;font-size:12px;color:#2E7D32;line-height:1.5;"><b>✅ 优点</b><br>'+escape(b["pro"])+'</div>'
@@ -68,6 +82,7 @@ def send(html, subj):
 def main():
     if not SMTP_U or not SMTP_P: logger.error("mail"); sys.exit(1)
     books = get_books()
+    logger.info("books: "+str(len(books)))
     subj, html = make_html(books)
     send(html, subj)
 if __name__=="__main__": main()
